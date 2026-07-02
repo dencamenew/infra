@@ -1,0 +1,57 @@
+- name: Check if control plane is initialized
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: kubeadm_admin_conf
+
+- name: Initialize Kubernetes control plane
+  command: >
+    kubeadm init
+    --apiserver-advertise-address={{ node_ip }}
+    --control-plane-endpoint={{ kubernetes_api_endpoint }}
+    --pod-network-cidr={{ kubernetes_pod_cidr }}
+    --service-cidr={{ kubernetes_service_cidr }}
+    --node-name={{ inventory_hostname }}
+  when: not kubeadm_admin_conf.stat.exists
+
+- name: Ensure ubuntu kube config directory exists
+  file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: "0755"
+
+- name: Copy admin kubeconfig for ubuntu
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/ubuntu/.kube/config
+    remote_src: true
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+
+- name: Ensure denis kube config directory exists
+  file:
+    path: /home/denis/.kube
+    state: directory
+    owner: denis
+    group: denis
+    mode: "0755"
+
+- name: Copy admin kubeconfig for denis
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/denis/.kube/config
+    remote_src: true
+    owner: denis
+    group: denis
+    mode: "0600"
+
+- name: Create worker join command
+  command: kubeadm token create --print-join-command
+  register: kubeadm_join_command
+  changed_when: false
+
+- name: Store worker join command
+  set_fact:
+    worker_join_command: "{{ kubeadm_join_command.stdout }}"

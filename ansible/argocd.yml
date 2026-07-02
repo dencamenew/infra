@@ -1,0 +1,17 @@
+- name: Preflight inventory validation
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure dynamic inventory contains a control plane node
+      assert:
+        that:
+          - (groups['kube_control_plane'] | default([]) | length) >= 1
+        fail_msg: >-
+          Dynamic inventory is empty. Run Terraform apply first and ensure
+          terraform output "vms" is available.
+
+- name: Install and configure Argo CD
+  hosts: kube_control_plane
+  become: true
+  roles:
+    - argocd

@@ -1,0 +1,27 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:18.11.6-ce.0
+    container_name: gitlab
+    restart: unless-stopped
+    hostname: gitlab.local
+    shm_size: "256m"
+
+    ports:
+      - "80:80"
+      - "8443:443"
+      - "2222:22"
+      - "5050:5050"
+
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.local'
+        registry_external_url 'http://gitlab.local:5050'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        gitlab_rails['registry_enabled'] = true
+        registry_nginx['listen_port'] = 5050
+        registry_nginx['listen_https'] = false
+
+    volumes:
+      - ./volumes/config:/etc/gitlab
+      - ./volumes/logs:/var/log/gitlab
+      - ./volumes/data:/var/opt/gitlab

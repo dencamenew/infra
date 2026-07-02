@@ -1,0 +1,77 @@
+- name: Install containerd
+  apt:
+    name: containerd
+    state: present
+    update_cache: true
+
+- name: Ensure containerd config directory exists
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Check containerd config
+  stat:
+    path: /etc/containerd/config.toml
+  register: containerd_config
+
+- name: Generate default containerd config
+  command: containerd config default
+  changed_when: true
+  register: containerd_default_config
+  when: not containerd_config.stat.exists
+
+- name: Write default containerd config
+  copy:
+    dest: /etc/containerd/config.toml
+    content: "{{ containerd_default_config.stdout }}"
+    mode: "0644"
+  when: not containerd_config.stat.exists
+
+- name: Enable systemd cgroups for kubelet
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: Restart containerd
+
+- name: Fix unsupported multi-path registry config_path format
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: "config_path = '/etc/containerd/certs\\.d:/etc/docker/certs\\.d'"
+    replace: "config_path = '/etc/containerd/certs.d'"
+  notify: Restart containerd
+
+- name: Enable containerd registry config path
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'config_path = ""'
+    replace: 'config_path = "/etc/containerd/certs.d"'
+  notify: Restart containerd
+
+- name: Create local registry config directory
+  file:
+    path: "/etc/containerd/certs.d/{{ local_registry_endpoint }}"
+    state: directory
+    mode: "0755"
+
+- name: Configure local GitLab registry as HTTP registry
+  copy:
+    dest: "/etc/containerd/certs.d/{{ local_registry_endpoint }}/hosts.toml"
+    mode: "0644"
+    content: |
+      server = "http://{{ local_registry_endpoint }}"
+
+      [host."http://{{ local_registry_endpoint }}"]
+        capabilities = ["pull", "resolve", "push"]
+        skip_verify = true
+  notify: Restart containerd
+
+- name: Flush containerd handlers
+  meta: flush_handlers
+
+- name: Enable and start containerd
+  service:
+    name: containerd
+    enabled: true
+    state: started

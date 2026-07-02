@@ -1,0 +1,32 @@
+cluster_name: local-k8s
+kubernetes_repo_version: v1.30
+kubernetes_pod_cidr: 10.244.0.0/16
+kubernetes_service_cidr: 10.96.0.0/12
+kubernetes_api_endpoint: "{{ hostvars[groups['kube_control_plane'][0]].node_ip }}"
+
+local_registry_host: gitlab.local
+local_registry_port: 5050
+local_registry_endpoint: "{{ local_registry_host }}:{{ local_registry_port }}"
+local_registry_ip_for_nodes: 10.10.10.1
+
+app_domain: app.lab.local
+api_domain: api.lab.local
+argocd_domain: argocd.lab.local
+
+argocd_repo_url: "http://10.10.10.1/root/terraform.git"
+argocd_repo_revision: main
+argocd_repo_path: k8s/base
+argocd_repo_username: "{{ lookup('env', 'ARGOCD_REPO_USERNAME') | default('', true) }}"
+argocd_repo_password: "{{ lookup('env', 'ARGOCD_REPO_PASSWORD') | default('', true) }}"
+
+cluster_hosts:
+  - ip: 10.10.10.10
+    names: ["k8s-master-1"]
+  - ip: 10.10.10.11
+    names: ["k8s-worker-1"]
+  - ip: 10.10.10.12
+    names: ["k8s-worker-2"]
+  - ip: 10.10.10.10
+    names: ["{{ app_domain }}", "{{ api_domain }}", "{{ argocd_domain }}"]
+  - ip: "{{ local_registry_ip_for_nodes }}"
+    names: ["{{ local_registry_host }}"]

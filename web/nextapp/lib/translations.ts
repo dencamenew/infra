@@ -1,0 +1,275 @@
+export type Language = "ru" | "en"
+
+export const translations = {
+  ru: {
+    // Auth
+    welcome: "Добро пожаловать",
+    enterCredentials: "Введите ваши данные для входа",
+    firstNamePlaceholder: "Имя",
+    lastNamePlaceholder: "Фамилия",
+    fullNamePlaceholder: "ФИО преподавателя",
+    passwordPlaceholder: "Пароль",
+    maxIdPlaceholder: "MAX ID",
+    login: "Войти",
+    loggingIn: "Входим...",
+    invalidCredentials: "Неверные данные для входа",
+    connectionError: "Ошибка подключения",
+
+    // Navigation
+    schedule: "РАСПИСАНИЕ",
+    rating: "Оценки",
+    attendance: "Посещаемость",
+    profile: "Профиль",
+    teacher: "Преподаватель",
+    student: "Студент",
+    admin: "Администратор",
+
+    // Schedule
+    selectDate: "Выберите дату",
+    loadingSchedule: "Загрузка расписания...",
+    noClasses: "Нет занятий на выбранную дату",
+    timeLabel: "Время",
+    roomLabel: "Аудитория",
+    groupLabel: "Группа",
+    lecture: "Лекция",
+    practice: "Практика",
+    lab: "Лабораторная",
+    seminar: "Семинар",
+    other: "Другое",
+    addComment: "Добавить комментарий",
+    commentPlaceholder: "Введите комментарий к занятию...",
+    commentAdded: "Комментарий добавлен",
+    back: "Назад",
+    send: "Отправить",
+    qrMarkStudent: "Отметиться с помощью QR",
+    qrMarkTeacher: "Отметить с помощью QR-сессии",
+    scheduleQR: {
+      teacher: {
+        title: "QR-код для посещаемости",
+        description: "Студенты могут отсканировать этот код",
+        marks: "Отметились",
+        close: "Завершить сессию",
+        cancel: "Отменить"
+      },
+      student: {
+        title: "Отметить посещение",
+        description: "Наведите камеру на QR-код",
+        processing: "Обработка...",
+        cancel: "Отменить",
+        done: "Посещение отмечено"
+      },
+      error: "Ошибка",
+      try: "Попробовать снова"
+    },
+
+    // Rating
+    faculty: "Факультет",
+    group: "Группа",
+    subject: "Предмет",
+    selectFaculty: "Выберите факультет",
+    selectGroup: "Выберите группу",
+    selectSubject: "Выберите предмет",
+    checkpoint: "Контрольная точка",
+    finalGrade: "Итоговая оценка",
+    practicalWork: "Практическая работа",
+    grade: "Оценка",
+    saveGrades: "Сохранить оценки",
+    gradesSaved: "Оценки сохранены",
+    selectGroupAndSubject: "Выберите группу и предмет",
+    isTextGradingOn: "Выберите оценку из списка. Изменения сохраняются автоматически.",
+    isTextGradingOff: "Нажмите на оценку для изменения. Изменения сохраняются автоматически.",
+    average: "Средний балл",
+
+    // Attendance
+    saveAttendance: "Сохранить посещаемость",
+    attendanceSaved: "Посещаемость сохранена",
+    present: "Присутствует",
+    absent: "Отсутствует",
+    late: "Опоздал",
+    choice: "Выберите предмет",
+    presence: "Присутствовал",
+    absence: "Отсутствовал",
+    status: "Статус",
+    searchSubject: "Поиск дисциплины",
+    date: "Дата",
+    notFound: "Дисциплины не найдены",
+    notData: "Нет данных о дисциплинах",
+
+    // Statements
+    statements: {
+      title: "Ведомости",
+      description: "Здесь вы можете скачать ведомости в формате PDF",
+      downlaodTitle: "Скачать ведомости",
+      processing: "Скачивание...",
+      downloadError: "Ошибка при скачивании",
+    },
+
+    library: {
+      title: "Библиотека",
+      author: "Автор",
+    },
+
+    navigation: {
+      schedule: "Расписание",
+      rating: "Оценки",
+      attendance: "Посещаемость",
+      statements: "Ведомости",
+      profile: "Профиль",
+      library: "Библиотека",
+    },
+
+    // Profile
+    accountInfo: "Информация об аккаунте",
+    teacherName: "Имя преподавателя",
+    settings: "Настройки",
+    darkTheme: "Темная тема",
+    lightTheme: "Светлая тема",
+    language: "Язык",
+    logout: "Выйти",
+
+
+    // Добавленные ключи
+    comment: "Комментарий",
+    close: "Закрыть",
+
+    numerator: "Числитель",
+    denominator: "Знаменатель",
+    week: "Неделя"
+  },
+  en: {
+    // Auth
+    welcome: "Welcome",
+    enterCredentials: "Enter your credentials to login",
+    firstNamePlaceholder: "First name",
+    lastNamePlaceholder: "Last name",
+    fullNamePlaceholder: "Teacher Full Name",
+    passwordPlaceholder: "Password",
+    maxIdPlaceholder: "MAX ID",
+    login: "Login",
+    loggingIn: "Signing in...",
+    invalidCredentials: "Invalid credentials",
+    connectionError: "Connection error",
+
+    numerator: "Numerator",
+    denominator: "Denominator",
+    week: "Week",
+    // Navigation
+    schedule: "Schedule",
+    rating: "Grades",
+    attendance: "Attendance",
+    profile: "Profile",
+    teacher: "Teacher",
+    student: "Student",
+    admin: "Admin",
+
+    // Schedule
+    selectDate: "Select date",
+    loadingSchedule: "Loading schedule...",
+    noClasses: "No classes for selected date",
+    timeLabel: "Time",
+    roomLabel: "Room",
+    groupLabel: "Group",
+    lecture: "Lecture",
+    practice: "Practice",
+    lab: "Lab",
+    seminar: "Seminar",
+    other: "Other",
+    addComment: "Add comment",
+    commentPlaceholder: "Enter comment for the lesson...",
+    commentAdded: "Comment added",
+    back: "Back",
+    send: "Send",
+    qrMarkStudent: "Mark with QR",
+    qrMarkTeacher: "Mark with QR session",
+    scheduleQR: {
+      teacher: {
+        title: "Attendance QR Code",
+        description: "Students can scan this code",
+        marks: "Checked in",
+        close: "End session",
+        cancel: "Cancel"
+      },
+      student: {
+        title: "Mark attendance",
+        description: "Point camera at the QR code",
+        processing: "Processing...",
+        cancel: "Cancel",
+        done: "Attendance is marked"
+      },
+      error: "Error",
+      try: "Try again"
+    },
+
+    // Rating
+    faculty: "Faculty",
+    group: "Group",
+    subject: "Subject",
+    selectFaculty: "Select faculty",
+    selectGroup: "Select group",
+    selectSubject: "Select subject",
+    checkpoint: "Checkpoint",
+    finalGrade: "Final Grade",
+    practicalWork: "Practical Work",
+    grade: "Grade",
+    saveGrades: "Save Grades",
+    gradesSaved: "Grades saved",
+    selectGroupAndSubject: "Select group and subject",
+    isTextGradingOn: "Select a rating from the list. Changes are saved automatically.",
+    isTextGradingOff: "Click on the rating to change it. Changes are saved automatically.",
+    average: "Average",
+
+    // Attendance
+    saveAttendance: "Save Attendance",
+    attendanceSaved: "Attendance saved",
+    present: "Present",
+    absent: "Absent",
+    late: "Late",
+    choice: "Select subject",
+    presence: "Presence",
+    absence: "Absence",
+    status: "Status",
+    searchSubject: "Search subject",
+    date: "Date",
+    notFound: "Disciplines not found",
+    notData: "There is no data on disciplines",
+
+    // Statements
+
+    statements: {
+      title: "Statements",
+      description: "Here you can download the statements in PDF format",
+      downlaodTitle: "Download statements",
+      processing: "Download...",
+      downloadError: "Download error",
+    },
+
+
+    library: {
+      title: "Library",
+      author: "Author",
+    },
+
+    navigation: {
+      schedule: "Schedule",
+      rating: "Grades",
+      attendance: "Attendance",
+      statements: "Statements",
+      library: "Library",
+      profile: "Profile",
+    },
+
+    // Profile
+    accountInfo: "Account Information",
+    teacherName: "Teacher Name",
+    settings: "Settings",
+    darkTheme: "Dark Theme",
+    lightTheme: "Light Theme",
+    language: "Language",
+    logout: "Logout",
+
+
+    // Добавленные ключи
+    comment: "Comment",
+    close: "Close",
+  },
+}

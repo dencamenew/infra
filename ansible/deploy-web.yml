@@ -1,0 +1,162 @@
+- name: Preflight inventory validation
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure dynamic inventory contains a control plane node
+      assert:
+        that:
+          - (groups['kube_control_plane'] | default([]) | length) >= 1
+        fail_msg: >-
+          Dynamic inventory is empty. Run Terraform apply first and ensure
+          terraform output "vms" is available.
+
+- name: Configure local host DNS aliases
+  hosts: localhost
+  become: true
+  gather_facts: false
+  vars:
+    ingress_ip: "{{ hostvars[groups['kube_control_plane'][0]].node_ip }}"
+  tasks:
+    - name: Ensure app and API domains resolve to ingress IP on host machine
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^.*\\b{{ item }}\\b.*$"
+        line: "{{ ingress_ip }} {{ item }}"
+        state: present
+      loop:
+        - "{{ app_domain }}"
+        - "{{ api_domain }}"
+
+- name: Ensure registry DNS alias on all Kubernetes nodes
+  hosts: k8s_cluster
+  become: true
+  gather_facts: false
+  vars:
+    ingress_ip: "{{ hostvars[groups['kube_control_plane'][0]].node_ip }}"
+  tasks:
+    - name: Ensure app and API domains resolve to ingress IP on each node
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^.*\\b{{ item }}\\b.*$"
+        line: "{{ ingress_ip }} {{ item }}"
+        state: present
+      loop:
+        - "{{ app_domain }}"
+        - "{{ api_domain }}"
+
+    - name: Ensure local registry hostname resolves on each node
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^.*\\b{{ local_registry_host }}\\b.*$"
+        line: "{{ local_registry_ip_for_nodes }} {{ local_registry_host }}"
+        state: present
+
+- name: Prepare local-path storage directories for stateful workloads
+  hosts: k8s_cluster
+  become: true
+  gather_facts: false
+  vars:
+    local_storage_dirs:
+      - /var/lib/local-k8s-storage/postgres
+      - /var/lib/local-k8s-storage/mongo
+  tasks:
+    - name: Ensure local storage directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0777"
+      loop: "{{ local_storage_dirs }}"
+
+- name: Bootstrap the web namespace (one-time)
+  hosts: kube_control_plane
+  become: true
+  tasks:
+    - name: Check current state of web namespace
+      command: kubectl get namespace web -o jsonpath='{.status.phase}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: web_namespace_phase
+      failed_when: false
+      changed_when: false
+
+    - name: Remove finalizers when web namespace is stuck in Terminating
+      command: kubectl patch namespace web --type=merge -p '{"spec":{"finalizers":[]}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when:
+        - web_namespace_phase.rc == 0
+        - web_namespace_phase.stdout == "Terminating"
+      changed_when: false
+
+    - name: Wait for terminating web namespace to disappear
+      command: kubectl get namespace web
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: web_namespace_deleted
+      failed_when: false
+      changed_when: false
+      retries: 24
+      delay: 5
+      until: web_namespace_deleted.rc != 0
+      when:
+        - web_namespace_phase.rc == 0
+        - web_namespace_phase.stdout == "Terminating"
+
+    - name: Ensure web namespace exists
+      command: kubectl create namespace web --dry-run=client -o yaml
+      register: namespace_manifest
+      changed_when: false
+
+    - name: Apply web namespace
+      shell: "echo '{{ namespace_manifest.stdout }}' | kubectl apply -f -"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Wait until web namespace becomes Active
+      command: kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/web --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Wait for default service account in web namespace
+      command: kubectl -n web get serviceaccount default
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: web_default_sa
+      retries: 24
+      delay: 5
+      until: web_default_sa.rc == 0
+      changed_when: false
+
+    - name: Create GitLab registry pull secret when credentials are provided
+      shell: >
+        kubectl -n web create secret docker-registry local-gitlab-registry
+        --docker-server={{ local_registry_endpoint }}
+        --docker-username="$GITLAB_REGISTRY_USER"
+        --docker-password="$GITLAB_REGISTRY_PASSWORD"
+        --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+        GITLAB_REGISTRY_USER: "{{ lookup('env', 'GITLAB_REGISTRY_USER') }}"
+        GITLAB_REGISTRY_PASSWORD: "{{ lookup('env', 'GITLAB_REGISTRY_PASSWORD') }}"
+      when:
+        - lookup('env', 'GITLAB_REGISTRY_USER') | length > 0
+        - lookup('env', 'GITLAB_REGISTRY_PASSWORD') | length > 0
+      changed_when: false
+
+    - name: Attach GitLab registry pull secret to default service account
+      command: kubectl -n web patch serviceaccount default -p '{"imagePullSecrets":[{"name":"local-gitlab-registry"}]}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when:
+        - lookup('env', 'GITLAB_REGISTRY_USER') | length > 0
+        - lookup('env', 'GITLAB_REGISTRY_PASSWORD') | length > 0
+      changed_when: false
+
+    - name: Print next step
+      debug:
+        msg: >-
+          Bootstrap complete. Deployment of k8s/base is now owned by the
+          Argo CD "web" Application. Trigger a sync manually the first time
+          (argocd app sync web) or wait for its next automated sync.

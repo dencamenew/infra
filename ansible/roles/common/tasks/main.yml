@@ -1,0 +1,65 @@
+- name: Set node hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Install base packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - python3
+      - python3-apt
+    state: present
+    update_cache: true
+
+- name: Add cluster and local registry hosts
+  lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ item.ip | regex_escape }}\\s+"
+    line: "{{ item.ip }} {{ item.names | join(' ') }}"
+    state: present
+  loop: "{{ cluster_hosts }}"
+
+- name: Disable swap for current boot
+  command: swapoff -a
+  changed_when: false
+
+- name: Disable swap in fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+
+- name: Load Kubernetes kernel modules at boot
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Configure Kubernetes sysctl values
+  copy:
+    dest: /etc/sysctl.d/99-kubernetes-cri.conf
+    mode: "0644"
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+- name: Apply sysctl values
+  command: sysctl --system
+  changed_when: false

@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fill-db
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-fastapi
+          image: gitlab.local:5050/root/terraform/curlimages-curl:8.8.0
+          command: ["sh", "-c", "until curl -fsS http://fastapi:8080/health; do sleep 5; done"]
+      containers:
+        - name: fill-db
+          image: gitlab.local:5050/root/terraform/fill-db:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          env:
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gridfs-loader
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-mongo
+          image: gitlab.local:5050/root/terraform/mongo:4.4
+          command: ["sh", "-c", "until mongo mongodb://mongo-gridfs:27017 --eval 'db.runCommand({ ping: 1 }).ok'; do sleep 5; done"]
+      containers:
+        - name: gridfs-loader
+          image: gitlab.local:5050/root/terraform/gridfs-loader:latest
+          imagePullPolicy: Always
+          env:
+            - name: MONGO_URI
+              value: mongodb://mongo-gridfs:27017

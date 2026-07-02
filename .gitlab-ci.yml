@@ -1,0 +1,126 @@
+stages:
+  - lint
+  - build
+  - update-manifests
+  - verify
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes:
+        - web/**/*
+        - k8s/**/*
+        - ansible/deploy-web.yml
+        - scripts/build-and-push.sh
+    - when: never
+
+default:
+  tags:
+    - local-lab
+  interruptible: true
+  retry:
+    max: 1
+    when: runner_system_failure
+  before_script:
+    - set -euo pipefail
+
+# ---------- lint ----------
+lint_terraform:
+  stage: lint
+  before_script:
+    - set -euo pipefail
+    - command -v terraform >/dev/null
+  script:
+    - terraform -chdir=terraform/envs/dev fmt -check -recursive
+    - terraform -chdir=terraform/envs/dev validate -backend=false
+
+lint_ansible:
+  stage: lint
+  before_script:
+    - set -euo pipefail
+    - command -v ansible-lint >/dev/null || pip install --user ansible-lint
+  script:
+    - ansible-lint ansible/site.yml ansible/deploy-web.yml ansible/argocd.yml
+
+# ---------- build ----------
+build_images:
+  stage: build
+  before_script:
+    - set -euo pipefail
+    - command -v docker >/dev/null
+  variables:
+    IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
+  script:
+    - ./scripts/build-and-push.sh
+  artifacts:
+    reports:
+      dotenv: build.env 
+
+update_manifests:
+  stage: update-manifests
+  needs:
+    - build_images
+  before_script:
+    - set -euo pipefail
+    - command -v python3 >/dev/null
+    - pip install --break-system-packages -q ruamel.yaml
+  script:
+    - ./scripts/bump_kustomize_image_tags.py "${IMAGE_TAG}" k8s/base/kustomization.yml
+    - |
+      git config user.email "ci@gitlab.local"
+      git config user.name "gitlab-ci"
+      git add k8s/base/kustomization.yml
+      git commit -m "ci: bump web image tags to ${IMAGE_TAG} [skip ci]" || echo "nothing to commit"
+      git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:${CI_COMMIT_BRANCH}
+
+
+verify_rollout:
+  stage: verify
+  needs:
+    - update_manifests
+  variables:
+    TF_STATE_NAME: "dev"
+  before_script:
+    - set -euo pipefail
+    - command -v ansible-playbook >/dev/null
+    - command -v terraform >/dev/null
+  script:
+    - |
+      TF_HTTP_USERNAME="${TF_HTTP_USERNAME:-gitlab-ci-token}"
+      TF_HTTP_PASSWORD="${TF_HTTP_PASSWORD:-$CI_JOB_TOKEN}"
+      TF_HTTP_ADDRESS="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${TF_STATE_NAME}"
+
+      terraform -chdir=terraform/envs/dev init -reconfigure \
+        -backend-config="address=${TF_HTTP_ADDRESS}" \
+        -backend-config="lock_address=${TF_HTTP_ADDRESS}/lock" \
+        -backend-config="unlock_address=${TF_HTTP_ADDRESS}/lock" \
+        -backend-config="username=${TF_HTTP_USERNAME}" \
+        -backend-config="password=${TF_HTTP_PASSWORD}" \
+        -backend-config="lock_method=POST" \
+        -backend-config="unlock_method=DELETE" \
+        -backend-config="retry_wait_min=5"
+
+      cd ansible
+      ansible-inventory -i inventory/terraform.py --list > /tmp/ci_inventory.json
+      python3 ../scripts/check_inventory.py /tmp/ci_inventory.json
+      ansible -i inventory/terraform.py k8s_cluster -m ping
+
+      # Wait for Argo CD to pick up the new commit and sync
+      ansible -i inventory/terraform.py kube_control_plane -b -m shell -a \
+        "kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/web --timeout=180s"
+      ansible -i inventory/terraform.py kube_control_plane -b -m shell -a \
+        "kubectl -n web rollout status deployment/nextapp --timeout=300s"
+      ansible -i inventory/terraform.py kube_control_plane -b -m shell -a \
+        "kubectl -n web rollout status deployment/fastapi --timeout=300s"
+
+  environment:
+    name: dev
+    url: http://app.lab.local
+
+smoke_test:
+  stage: verify
+  needs:
+    - verify_rollout
+  script:
+    - curl -fsS --max-time 10 http://app.lab.local > /dev/null
+    - curl -fsS --max-time 10 http://api.lab.local/health > /dev/null

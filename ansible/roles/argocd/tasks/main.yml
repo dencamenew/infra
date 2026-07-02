@@ -1,0 +1,79 @@
+- name: Ensure Argo CD namespace exists
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Install Argo CD
+  command: kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for Argo CD server deployment
+  command: kubectl -n argocd rollout status deployment/argocd-server --timeout=120s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+  failed_when: false
+
+- name: Configure Argo CD server for ingress (HTTP mode)
+  command: kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge -p '{"data":{"server.insecure":"true"}}'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Restart Argo CD server
+  command: kubectl -n argocd rollout restart deployment/argocd-server
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for Argo CD server restart rollout
+  command: kubectl -n argocd rollout status deployment/argocd-server --timeout=120s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+  failed_when: false
+
+- name: Render optional Argo CD git repository secret
+  template:
+    src: argocd-repo-secret.yaml.j2
+    dest: /tmp/argocd-repo-secret.yaml
+    mode: "0644"
+  when:
+    - argocd_repo_username | length > 0
+    - argocd_repo_password | length > 0
+
+- name: Apply optional Argo CD git repository secret
+  command: kubectl apply -f /tmp/argocd-repo-secret.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when:
+    - argocd_repo_username | length > 0
+    - argocd_repo_password | length > 0
+  changed_when: false
+
+- name: Render Argo CD application for web stack
+  template:
+    src: argocd-web-app.yaml.j2
+    dest: /tmp/argocd-web-app.yaml
+    mode: "0644"
+
+- name: Apply Argo CD application for web stack
+  command: kubectl apply -f /tmp/argocd-web-app.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Render Argo CD ingress
+  template:
+    src: argocd-ingress.yaml.j2
+    dest: /tmp/argocd-ingress.yaml
+    mode: "0644"
+
+- name: Apply Argo CD ingress
+  command: kubectl apply -f /tmp/argocd-ingress.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false

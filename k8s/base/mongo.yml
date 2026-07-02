@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-gridfs
+spec:
+  selector:
+    app: mongo-gridfs
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo-gridfs
+spec:
+  serviceName: mongo-gridfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-gridfs
+  template:
+    metadata:
+      labels:
+        app: mongo-gridfs
+    spec:
+      containers:
+        - name: mongo
+          image: gitlab.local:5050/root/terraform/mongo:4.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          readinessProbe:
+            exec:
+              command: ["mongo", "--eval", "db.runCommand({ ping: 1 }).ok"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-storage
+        selector:
+          matchLabels:
+            app: mongo-gridfs
+        resources:
+          requests:
+            storage: 10Gi

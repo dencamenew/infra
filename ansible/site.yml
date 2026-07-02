@@ -1,0 +1,34 @@
+- name: Preflight inventory validation
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure dynamic inventory contains control plane and workers
+      assert:
+        that:
+          - (groups['kube_control_plane'] | default([]) | length) >= 1
+          - (groups['kube_workers'] | default([]) | length) >= 1
+        fail_msg: >-
+          Dynamic inventory is empty. Run Terraform apply first and ensure
+          terraform output "vms" is available.
+
+- name: Prepare Kubernetes nodes
+  hosts: k8s_cluster
+  become: true
+  roles:
+    - common
+    - containerd
+    - kubernetes
+
+- name: Bootstrap control plane
+  hosts: kube_control_plane
+  become: true
+  roles:
+    - kubeadm_control_plane
+    - cluster_addons
+    - argocd
+
+- name: Join worker nodes
+  hosts: kube_workers
+  become: true
+  roles:
+    - kubeadm_worker

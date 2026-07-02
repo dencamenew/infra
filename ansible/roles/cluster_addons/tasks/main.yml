@@ -1,0 +1,36 @@
+- name: Install Flannel CNI
+  command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Install ingress-nginx bare-metal manifest
+  command: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/baremetal/deploy.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for ingress-nginx deployment to exist
+  command: kubectl -n ingress-nginx get deployment ingress-nginx-controller
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: ingress_deployment
+  retries: 30
+  delay: 5
+  until: ingress_deployment.rc == 0
+  changed_when: false
+
+- name: Run ingress-nginx on host network
+  command: >
+    kubectl -n ingress-nginx patch deployment ingress-nginx-controller
+    --type merge
+    -p '{"spec":{"template":{"spec":{"hostNetwork":true,"dnsPolicy":"ClusterFirstWithHostNet","nodeSelector":{"kubernetes.io/hostname":"k8s-master-1"},"tolerations":[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]}}}}'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Wait for Kubernetes nodes to become Ready
+  command: kubectl wait --for=condition=Ready nodes --all --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
