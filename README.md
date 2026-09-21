@@ -1,151 +1,172 @@
-# Локальная Kubernetes-стенд (Terraform + Ansible + Kubeadm + GitLab Registry)
+# Local Kubernetes Infrastructure Lab
 
-Этот репозиторий разворачивает локальный Kubernetes-кластер на libvirt и запускает в нём ваш проект `web`.
+Учебный DevOps-проект, демонстрирующий полный путь от виртуальной инфраструктуры до доставки веб-приложения в Kubernetes.
 
-## Что разворачивается
+Проект создан как практический стенд для изучения Terraform, Ansible, Kubernetes, GitLab CI/CD и GitOps-подхода с Argo CD.
 
-* `3` виртуальные машины в libvirt:
+## Цель проекта
 
-  * `k8s-master-1` (`10.10.10.10`)
-  * `k8s-worker-1` (`10.10.10.11`)
-  * `k8s-worker-2` (`10.10.10.12`)
-* Kubernetes через `kubeadm + containerd`
-* Контроллер `ingress-nginx` внутри кластера
-* `Argo CD` для GitOps-деплоя из этого репозитория
-* Локальный GitLab Container Registry на `gitlab.local:5050`
-* Веб-стек в namespace `web`:
+Автоматизировать развёртывание веб-приложения на локальном Kubernetes-кластере, работающем поверх трёх виртуальных машин в libvirt:
 
-  * `nextapp`, `fastapi`, `postgres`, `redis`, `mongo-gridfs`
-  * bootstrap-задачи: `fill-db`, `gridfs-loader`
+- один control plane;
+- две worker-ноды;
+- containerd в качестве container runtime;
+- ingress-nginx для внешнего доступа;
+- Argo CD для GitOps-деплоя;
+- локальный GitLab Registry для хранения образов.
 
-## Структура проекта
+## Архитектура
 
-* `terraform/` — инфраструктура libvirt и описание ВМ
-* `ansible/` — bootstrap kubeadm и настройка кластера
-* `k8s/` — манифесты Kubernetes (kustomize)
-* `web/` — исходники приложения и Dockerfile
-* `gitlab-local/` — локальный GitLab
-* `scripts/` — скрипты для настройки хоста и сборки/публикации образов
-
-## Требования
-
-* Ubuntu-хост с `libvirt`, `qemu-kvm`, `terraform`, `ansible`, `docker`
-* Базовый образ для libvirt:
-
-  * `/var/lib/libvirt/images/ubuntu-pool/ubuntu-jammy-base.qcow2`
-* SSH-ключ из `terraform/envs/dev/terraform.tfvars` должен работать для доступа к ВМ
-
-## Домены и хостнеймы
-
-Запустите:
-
-```bash
-./scripts/host-setup.sh
+```text
+Terraform
+    │
+    ├── libvirt network
+    └── 3 virtual machines
+            │
+            ▼
+        Ansible
+            │
+            ├── базовая настройка ОС
+            ├── containerd и Kubernetes packages
+            ├── kubeadm control plane
+            ├── join worker-нод
+            └── CNI, ingress-nginx, Argo CD
+                    │
+                    ▼
+              Kubernetes cluster
+                    │
+                    ├── Next.js frontend
+                    ├── FastAPI backend
+                    ├── PostgreSQL
+                    ├── Redis
+                    ├── MongoDB/GridFS
+                    └── bootstrap Jobs
 ```
 
-Это обновит локальный `/etc/hosts`:
+## Технологический стек
 
-* `127.0.0.1 gitlab.local`
-* `10.10.10.10 app.lab.local`
-* `10.10.10.10 api.lab.local`
-* `10.10.10.10 argocd.lab.local`
+### Infrastructure
 
-## Процесс развертывания
+- Terraform;
+- libvirt / QEMU-KVM;
+- cloud-init;
+- Terraform HTTP backend в GitLab;
+- статическая адресация VM внутри libvirt network.
 
-1. Запуск локального GitLab:
+### Configuration management
 
-```bash
-cd gitlab-local
-docker compose up -d
+- Ansible;
+- динамический inventory из Terraform outputs;
+- отдельные роли для common configuration, containerd, Kubernetes, kubeadm и Argo CD;
+- идемпотентный bootstrap-контур.
+
+### Platform
+
+- Kubernetes, установленный через kubeadm;
+- containerd;
+- Flannel CNI;
+- ingress-nginx;
+- local persistent volumes;
+- Argo CD.
+
+### Application delivery
+
+- GitLab CI/CD;
+- Docker images в локальном GitLab Container Registry;
+- immutable image tags на основе commit SHA;
+- автоматическое обновление Kustomize image tags;
+- автоматическая проверка rollout и smoke tests.
+
+## Структура репозитория
+
+```text
+terraform/          Инфраструктура libvirt и описание виртуальных машин
+ansible/            Bootstrap ОС, Kubernetes и Argo CD
+k8s/                Kubernetes manifests и Kustomize base
+web/                Исходный код frontend/backend и database jobs
+gitlab-local/       Локальный GitLab и Container Registry
+monitoring/         Prometheus, Grafana, Loki и Grafana Alloy
+scripts/            Сборка образов, inventory checks и CI utilities
 ```
 
-2. Создание ВМ:
+## Локальный monitoring stack
 
-```bash
-terraform -chdir=terraform/envs/dev init -reconfigure \
-  -backend-config="address=http://gitlab.local/api/v4/projects/<project_id>/terraform/state/dev" \
-  -backend-config="lock_address=http://gitlab.local/api/v4/projects/<project_id>/terraform/state/dev/lock" \
-  -backend-config="unlock_address=http://gitlab.local/api/v4/projects/<project_id>/terraform/state/dev/lock" \
-  -backend-config="username=<gitlab-username>" \
-  -backend-config="password=<gitlab-access-token>" \
-  -backend-config="lock_method=POST" \
-  -backend-config="unlock_method=DELETE"
-terraform -chdir=terraform/envs/dev apply
-```
+Мониторинг запускается отдельным Docker Compose-стеком на хосте, по аналогии с локальным GitLab:
 
-Файл `backend.tf` уже содержит `backend "http" {}`, передаются только параметры доступа через `init`.
+- Prometheus — сбор метрик;
+- Grafana — dashboards и единая точка просмотра;
+- Loki — хранение логов;
+- Grafana Alloy — сбор Docker container logs и отправка в Loki;
+- Node Exporter — метрики хоста;
+- cAdvisor — метрики Docker-контейнеров.
 
-3. Bootstrap Kubernetes-кластера (один раз):
+Основные endpoints:
 
-```bash
-ansible-playbook -i ansible/inventory/terraform.py ansible/site.yml
-```
+- Grafana: `http://localhost:3000`;
+- Prometheus: `http://localhost:9090`;
+- Loki: `http://localhost:3100`.
 
-Будут установлены:
+Перед запуском нужно создать `monitoring/.env` на основе `monitoring/.env.example` и задать собственный пароль Grafana.
 
-* базовые компоненты Kubernetes
-* ingress-nginx
-* Argo CD
-* Argo CD Application `web`, отслеживающее `k8s/base` из Git
+Grafana автоматически получает Prometheus и Loki как datasources, а dashboard `Infrastructure overview` подключается через provisioning. Данные Prometheus, Grafana и Loki сохраняются в `monitoring/volumes/`, которые не добавляются в Git.
 
-Если кластер уже поднят и нужно только настроить/обновить Argo CD:
+Текущая конфигурация собирает метрики и Docker-логи локального хоста, включая GitLab и monitoring stack. Логи Kubernetes workload’ов, работающих внутри VM, пока требуют отдельного агента в кластере или на Kubernetes-нодах.
 
-```bash
-ansible-playbook -i ansible/inventory/terraform.py ansible/argocd.yml
-```
+## GitOps и CI/CD flow
 
-4. Сборка и публикация образов в GitLab Registry:
+1. Изменения в application code запускают pipeline GitLab CI.
+2. Pipeline собирает и публикует образы в GitLab Registry.
+3. Для образов формируется tag из короткого SHA коммита.
+4. CI обновляет tags в `k8s/base/kustomization.yml`.
+5. Argo CD отслеживает этот каталог и синхронизирует состояние Kubernetes.
+6. После синхронизации pipeline проверяет rollout frontend/backend и выполняет smoke tests.
 
-```bash
-./scripts/build-and-push.sh
-```
+Terraform и Ansible отвечают за инфраструктурный bootstrap, а дальнейшие изменения приложения доставляются через GitOps.
 
-Если registry приватный, экспортируйте креды:
+## Реализованные инженерные решения
 
-```bash
-export GITLAB_REGISTRY_USER="<gitlab-username>"
-export GITLAB_REGISTRY_PASSWORD="<gitlab-password-or-token>"
-```
+- Динамический Ansible inventory строится из Terraform state.
+- Состав кластера проверяется Terraform validation rules.
+- Worker-ноды присоединяются до установки cluster addons.
+- Kubernetes-ноды получают фиксированные имена и адреса.
+- Для stateful workloads используются local PV и отдельные storage paths.
+- Containerd настроен на работу с локальным registry.
+- SSH password authentication отключена, доступ выполняется по ключу.
+- CI проверяет Terraform, Ansible, доступность Kubernetes-нод и rollout приложения.
 
-5. Первичный деплой (один раз, дальше Argo CD сам):
+## Ограничения текущей версии
 
-```bash
-ansible-playbook -i ansible/inventory/terraform.py ansible/deploy-web.yml
-```
+Это локальный учебный кластер, а не production-платформа:
 
-## Дальнейшая работа
+- control plane один, поэтому нет высокой доступности Kubernetes API;
+- storage реализован через local PV без репликации;
+- registry работает в локальной сети;
+- TLS и production secret management пока не включены;
+- резервное копирование баз данных требует отдельной реализации.
 
-* Инфраструктура (`terraform/`, базовая настройка kubeadm) — одноразовая
-* Изменения в Kubernetes (реплики, ingress, ресурсы, теги образов) — через Git (`k8s/`)
-* Argo CD автоматически синхронизирует состояние кластера
-* CI/CD собирает образы и обновляет теги в `k8s/base/*.yml`
+Эти ограничения оставлены осознанно: проект сфокусирован на понимании базового жизненного цикла инфраструктуры и доставки приложения.
 
-Переменные CI/CD:
+## План развития
 
-* `GITLAB_REGISTRY_PASSWORD`
-* `GITLAB_REGISTRY_USER` (опционально, по умолчанию `root`)
-* `TF_HTTP_USERNAME` / `TF_HTTP_PASSWORD` (опционально, по умолчанию `gitlab-ci-token` + `$CI_JOB_TOKEN`)
+- вынести секреты в SOPS/age или внешний secret manager;
+- перевести registry и ingress на TLS;
+- закрепить версии всех внешних Kubernetes manifests;
+- добавить сбор Kubernetes-логов через Alloy или Fluent Bit DaemonSet;
+- добавить NetworkPolicy и resource requests/limits;
+- реализовать backup/restore для PostgreSQL и MongoDB;
+- разделить Kubernetes-конфигурацию на dev/stage overlays;
+- добавить отдельные integration tests для приложения и инфраструктуры.
 
-## Доступ
+## Результат
 
-* Фронтенд: `http://app.lab.local`
-* API: `http://api.lab.local`
-* Argo CD UI: `http://argocd.lab.local`
-* GitLab: `http://gitlab.local`
-* Registry: `http://gitlab.local:5050`
+Проект показывает практическое владение базовыми DevOps-компетенциями:
 
-## Полезные проверки
+- Infrastructure as Code;
+- Configuration Management;
+- Kubernetes cluster bootstrap;
+- CI/CD;
+- GitOps;
+- container registry;
+- базовая эксплуатация stateful и stateless workloads.
 
-```bash
-ssh ubuntu@10.10.10.10 "kubectl get nodes -o wide"
-ssh ubuntu@10.10.10.10 "kubectl -n web get pods,svc,ingress"
-ssh ubuntu@10.10.10.10 "kubectl -n ingress-nginx get pods"
-```
-
-## Примечания
-
-* Динамический inventory генерируется из вывода Terraform: `ansible/inventory/terraform.py`
-* `containerd` на всех нодах настроен на использование локального registry `gitlab.local:5050`
-* `ingress-nginx` настроен с `hostNetwork: true` на `k8s-master-1` для локального bare-metal доступа
-* URL репозитория Argo CD по умолчанию: `http://10.10.10.1/root/terraform.git`
-  При необходимости измените в `ansible/group_vars/all.yml`
+Основная ценность проекта — не только в запуске приложения, а в автоматизации всего пути от виртуальной машины до проверенного deployment’а в Kubernetes.

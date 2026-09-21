@@ -17,21 +17,9 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     groups: users, sudo
     shell: /bin/bash
+    lock_passwd: true
 
-  - name: denis
-    ssh_authorized_keys:
-      - ${var.ssh_public_key}
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    groups: users, sudo
-    shell: /bin/bash
-
-chpasswd:
-  list: |
-    ubuntu:ubuntu123!
-    denis:1711Denis!
-  expire: false
-
-ssh_pwauth: true
+ssh_pwauth: false
 package_update: true
 
 packages:

@@ -55,11 +55,33 @@ variable "vms" {
   }))
   description = "Stage VM definitions"
 
+  validation {
+    condition     = length([for vm in values(var.vms) : vm if vm.role == "control_plane"]) == 1
+    error_message = "stage must define exactly one control_plane VM."
+  }
+
+  validation {
+    condition     = length([for vm in values(var.vms) : vm if vm.role == "worker"]) >= 1
+    error_message = "stage must define at least one worker VM."
+  }
+
+  validation {
+    condition     = alltrue([for vm in values(var.vms) : contains(["control_plane", "worker"], vm.role)])
+    error_message = "stage VM roles must be control_plane or worker."
+  }
+
   default = {
-    stage-vm = {
-      role   = "app"
+    stage-control-plane = {
+      role   = "control_plane"
       ip     = "10.20.20.10"
       mac    = "52:54:00:20:20:10"
+      memory = 4096
+      vcpu   = 2
+    }
+    stage-worker-1 = {
+      role   = "worker"
+      ip     = "10.20.20.11"
+      mac    = "52:54:00:20:20:11"
       memory = 4096
       vcpu   = 2
     }

@@ -8,6 +8,11 @@ terraform.tfvars
 crash.log
 crash.*.log
 
+# Generated local/CI files
+build.env
+__pycache__/
+*.py[cod]
+
 # OS / editor
 .DS_Store
 .idea/
@@ -15,3 +20,5 @@ crash.*.log
 
 # Local GitLab Docker volumes / runtime data
 gitlab-local/volumes/
+monitoring/volumes/
+monitoring/.env

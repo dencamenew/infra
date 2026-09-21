@@ -24,11 +24,16 @@
   become: true
   roles:
     - kubeadm_control_plane
-    - cluster_addons
-    - argocd
 
 - name: Join worker nodes
   hosts: kube_workers
   become: true
   roles:
     - kubeadm_worker
+
+- name: Install cluster addons after all nodes joined
+  hosts: kube_control_plane
+  become: true
+  roles:
+    - cluster_addons
+    - argocd

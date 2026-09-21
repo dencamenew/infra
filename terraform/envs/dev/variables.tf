@@ -55,6 +55,21 @@ variable "vms" {
   }))
   description = "Kubernetes VM definitions"
 
+  validation {
+    condition     = length([for vm in values(var.vms) : vm if vm.role == "control_plane"]) == 1
+    error_message = "dev must define exactly one control_plane VM."
+  }
+
+  validation {
+    condition     = length([for vm in values(var.vms) : vm if vm.role == "worker"]) >= 1
+    error_message = "dev must define at least one worker VM."
+  }
+
+  validation {
+    condition     = alltrue([for vm in values(var.vms) : contains(["control_plane", "worker"], vm.role)])
+    error_message = "dev VM roles must be control_plane or worker."
+  }
+
   default = {
     k8s-master-1 = {
       role   = "control_plane"
